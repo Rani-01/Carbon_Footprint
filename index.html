@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- SEO Meta Tags -->
+  <title>EcoTrace | Personal Carbon Footprint Tracker & Reduction Assistant</title>
+  <meta name="description" content="Track your daily carbon footprint, log green activities, receive contextual AI-driven environmental recommendations, and conquer weekly gamified eco-challenges with EcoTrace.">
+  <meta name="keywords" content="carbon footprint, carbon tracker, sustainability, climate change, eco-friendly, green assistant">
+  <meta name="author" content="EcoTrace Team">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            slate: {
+              850: '#1e293b',
+              950: '#0b1310',
+            },
+            emerald: {
+              450: '#34d399',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- FontAwesome Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" integrity="sha512-z3gLpd7yknf1YoNbCzqRKc4qyor8gaKU1qmn+CShxbuBusANI9QpRohGBreCFkKxLhei6S9CQXFEbbKuqLg0DA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="css/index.css">
+</head>
+<body class="flex flex-col min-h-screen text-slate-100 selection:bg-emerald-500/30 selection:text-emerald-300">
+
+  <!-- Header Banner -->
+  <header class="w-full border-b border-emerald-950/30 bg-slate-950/60 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 pulse-glow">
+          <i class="fa-solid fa-leaf text-slate-950 text-lg"></i>
+        </div>
+        <div>
+          <span class="text-xl font-bold tracking-tight text-slate-100">Eco<span class="gradient-text-green font-extrabold">Trace</span></span>
+          <span class="hidden sm:inline-block ml-2 text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-semibold">Beta</span>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-4">
+        <!-- Point counter for accessibility and visual engagement -->
+        <div class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-amber-500/20 bg-amber-500/5 text-amber-400 text-sm font-semibold select-none" id="header-points-container">
+          <span class="text-base select-none">🏆</span>
+          <span id="metric-points" aria-label="Current score points">0</span> <span class="text-xs text-amber-500/70 font-normal">pts</span>
+        </div>
+        
+        <button onclick="resetDashboardData()" aria-label="Reset all application data" class="px-3 py-1.5 text-xs text-slate-400 hover:text-rose-400 transition-colors duration-200 flex items-center gap-1.5 border border-slate-800 rounded-lg bg-slate-900/30">
+          <i class="fa-solid fa-rotate-left"></i>
+          <span>Reset</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none" aria-live="assertive"></div>
+
+  <!-- Onboarding setup modal (blocks main contents until setup completes) -->
+  <div id="onboarding-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md hidden" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+    <div class="w-full max-w-xl rounded-3xl border border-emerald-500/20 bg-slate-950/80 p-6 md:p-8 shadow-2xl glass-panel relative overflow-hidden">
+      <!-- Background glowing orb -->
+      <div class="absolute -top-32 -left-32 w-64 h-64 bg-emerald-500/10 rounded-full filter blur-3xl pointer-events-none"></div>
+
+      <div class="text-center mb-8 relative">
+        <span class="text-3xl">🌱</span>
+        <h2 id="onboarding-title" class="text-2xl font-bold mt-2 text-slate-100">Welcome to EcoTrace</h2>
+        <p class="text-slate-400 text-xs mt-1">Let's calculate your daily baseline carbon emissions.</p>
+      </div>
+
+      <form id="onboarding-form">
+        <!-- Progress Steps indicator -->
+        <div class="flex justify-between items-center mb-8 max-w-xs mx-auto">
+          <div id="ind-step-1" class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs bg-emerald-500 text-slate-950">1</div>
+          <div class="flex-1 h-[2px] bg-slate-800"></div>
+          <div id="ind-step-2" class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs bg-slate-800 text-slate-400">2</div>
+          <div class="flex-1 h-[2px] bg-slate-800"></div>
+          <div id="ind-step-3" class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs bg-slate-800 text-slate-400">3</div>
+          <div class="flex-1 h-[2px] bg-slate-800"></div>
+          <div id="ind-step-4" class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs bg-slate-800 text-slate-400">4</div>
+        </div>
+
+        <!-- Onboarding Wizard Steps -->
+        <!-- Step 1: Diet -->
+        <div id="step-1" class="space-y-4">
+          <h3 class="font-bold text-base text-slate-200">1. What is your typical diet type?</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="flex items-center gap-3 p-3 rounded-2xl border border-slate-800 bg-slate-900/30 hover:border-emerald-500/40 cursor-pointer transition-all">
+              <input type="radio" name="dietType" value="vegan" class="accent-emerald-500" checked>
+              <div>
+                <div class="text-xs font-bold text-slate-200">Vegan 🌱</div>
+                <div class="text-[10px] text-slate-400">No animal products (~1.5 kg CO2e/day)</div>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-2xl border border-slate-800 bg-slate-900/30 hover:border-emerald-500/40 cursor-pointer transition-all">
+              <input type="radio" name="dietType" value="vegetarian" class="accent-emerald-500">
+              <div>
+                <div class="text-xs font-bold text-slate-200">Vegetarian 🥗</div>
+                <div class="text-[10px] text-slate-400">No meat, includes dairy/eggs (~2.5 kg CO2e/day)</div>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-2xl border border-slate-800 bg-slate-900/30 hover:border-emerald-500/40 cursor-pointer transition-all">
+              <input type="radio" name="dietType" value="flexitarian" class="accent-emerald-500">
+              <div>
+                <div class="text-xs font-bold text-slate-200">Flexitarian 🥩</div>
+                <div class="text-[10px] text-slate-400">Meat occasionally/reduced (~3.8 kg CO2e/day)</div>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-2xl border border-slate-800 bg-slate-900/30 hover:border-emerald-500/40 cursor-pointer transition-all">
+              <input type="radio" name="dietType" value="carnivore" class="accent-emerald-500">
+              <div>
+                <div class="text-xs font-bold text-slate-200">Average Carnivore 🍖</div>
+                <div class="text-[10px] text-slate-400">Regular meat consumption (~5.8 kg CO2e/day)</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Step 2: Transit -->
+        <div id="step-2" class="space-y-4 hidden">
+          <h3 class="font-bold text-base text-slate-200">2. How do you primarily travel?</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label class="flex items-center gap-3 p-3 rounded-2xl border border-slate-800 bg-slate-900/30 hover:border-emerald-500/40 cursor-pointer transition-all">
+              <input type="radio" name="transitMode" value="walking_biking" class="accent-emerald-500" checked>
+              <div>
+                <div class="text-xs font-bold text-slate-200">Walking / Cycling 🚲</div>
+                <div class="text-[10px] text-slate-400">Zero direct emissions (0 kg CO2e/day)</div>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-2xl border border-slate-800 bg-slate-900/30 hover:border-emerald-500/40 cursor-pointer transition-all">
+              <input type="radio" name="transitMode" value="public_transit" class="accent-emerald-500">
+              <div>
+                <div class="text-xs font-bold text-slate-200">Public Transit 🚌</div>
+                <div class="text-[10px] text-slate-400">Bus, rail, subway average (~0.8 kg CO2e/day)</div>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-2xl border border-slate-800 bg-slate-900/30 hover:border-emerald-500/40 cursor-pointer transition-all">
+              <input type="radio" name="transitMode" value="electric_vehicle" class="accent-emerald-500">
+              <div>
+                <div class="text-xs font-bold text-slate-200">Electric Vehicle ⚡</div>
+                <div class="text-[10px] text-slate-400">EV charging on grid (~1.0 kg CO2e/day)</div>
+              </div>
+            </label>
+            <label class="flex items-center gap-3 p-3 rounded-2xl border border-slate-800 bg-slate-900/30 hover:border-emerald-500/40 cursor-pointer transition-all">
+              <input type="radio" name="transitMode" value="petrol_diesel_car" class="accent-emerald-500">
+              <div>
+                <div class="text-xs font-bold text-slate-200">Petrol / Diesel Car 🚗</div>
+                <div class="text-[10px] text-slate-400">Standard combustion engine (~4.0 kg CO2e/day)</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Step 3: Housing -->
+        <div id="step-3" class="space-y-4 hidden">
+          <h3 class="font-bold text-base text-slate-200">3. What size is your household?</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label class="flex flex-col justify-between p-3 rounded-2xl border border-slate-800 bg-slate-900/30 hover:border-emerald-500/40 cursor-pointer transition-all">
+              <div class="flex items-center gap-2 mb-2">
+                <input type="radio" name="housingSize" value="studio_apartment" class="accent-emerald-500" checked>
+                <span class="text-xs font-bold text-slate-200">Studio / Flat</span>
+              </div>
+              <span class="text-[10px] text-slate-400">Low utility overhead (~2.0 kg CO2e/day)</span>
+            </label>
+            <label class="flex flex-col justify-between p-3 rounded-2xl border border-slate-800 bg-slate-900/30 hover:border-emerald-500/40 cursor-pointer transition-all">
+              <div class="flex items-center gap-2 mb-2">
+                <input type="radio" name="housingSize" value="medium_house" class="accent-emerald-500">
+                <span class="text-xs font-bold text-slate-200">Medium House</span>
+              </div>
+              <span class="text-[10px] text-slate-400">Average family home (~4.5 kg CO2e/day)</span>
+            </label>
+            <label class="flex flex-col justify-between p-3 rounded-2xl border border-slate-800 bg-slate-900/30 hover:border-emerald-500/40 cursor-pointer transition-all">
+              <div class="flex items-center gap-2 mb-2">
+                <input type="radio" name="housingSize" value="large_house" class="accent-emerald-500">
+                <span class="text-xs font-bold text-slate-200">Large House</span>
+              </div>
+              <span class="text-[10px] text-slate-400">High climate overhead (~7.0 kg CO2e/day)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Step 4: Country -->
+        <div id="step-4" class="space-y-4 hidden">
+          <h3 class="font-bold text-base text-slate-200">4. Select your location multiplier</h3>
+          <p class="text-xs text-slate-400 leading-relaxed">Grid energy sources change emission factors based on the country's local generation portfolio.</p>
+          <div class="relative">
+            <select id="onboarding-country" class="w-full px-4 py-3 rounded-2xl border border-slate-800 bg-slate-900/50 text-slate-100 focus:outline-none focus:border-emerald-500 transition-colors">
+              <option value="usa">United States (Multiplier: 1.2)</option>
+              <option value="eu">European Union (Multiplier: 0.9)</option>
+              <option value="india">India (Multiplier: 1.1)</option>
+              <option value="other" selected>Other / World Average (Multiplier: 1.0)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Modal Controls -->
+        <div class="flex items-center justify-between mt-8 pt-4 border-t border-slate-900">
+          <button type="button" id="prev-step-btn" class="px-5 py-2.5 rounded-xl border border-slate-800 bg-slate-900/30 text-xs font-semibold hover:bg-slate-800 hover:text-white transition-all invisible">Back</button>
+          
+          <div class="flex gap-2">
+            <button type="button" id="next-step-btn" class="px-6 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs hover:bg-emerald-400 transition-all">Next</button>
+            <button type="submit" id="submit-onboarding-btn" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-extrabold text-xs hover:from-emerald-400 hover:to-teal-400 transition-all hidden">Calculate Baseline</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main Layout Grid -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col lg:flex-row gap-6">
+
+    <!-- Left Column: Scoreboard, Quick Action logs, Log Forms & Logs list (70%) -->
+    <section class="flex-1 lg:w-8/12 flex flex-col gap-6" aria-label="Dashboard Overview">
+
+      <!-- Scoreboard metrics cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <!-- Today emissions card -->
+        <div class="p-4 rounded-3xl border border-slate-800 bg-slate-900/30 glass-panel">
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Today's Net</div>
+          <div class="flex items-baseline gap-1 mt-1 text-2xl md:text-3xl font-extrabold text-emerald-400">
+            <span id="metric-today-emissions">0.0</span>
+            <span class="text-xs font-normal text-slate-400">kg CO2e</span>
+          </div>
+        </div>
+
+        <!-- Baseline allowance card -->
+        <div class="p-4 rounded-3xl border border-slate-800 bg-slate-900/30 glass-panel">
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Baseline Target</div>
+          <div class="flex items-baseline gap-1 mt-1 text-2xl md:text-3xl font-extrabold text-slate-300">
+            <span id="metric-baseline">0.0</span>
+            <span class="text-xs font-normal text-slate-400">kg CO2e</span>
+          </div>
+        </div>
+
+        <!-- Saved carbon card -->
+        <div class="p-4 rounded-3xl border border-slate-800 bg-slate-900/30 glass-panel">
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Carbon Saved Today</div>
+          <div class="flex items-baseline gap-1 mt-1 text-2xl md:text-3xl font-extrabold text-teal-400">
+            <span id="metric-saved-co2">0.0</span>
+            <span class="text-xs font-normal text-slate-400">kg CO2e</span>
+          </div>
+        </div>
+
+        <!-- Daily Target progress card -->
+        <div class="p-4 rounded-3xl border border-slate-800 bg-slate-900/30 glass-panel flex flex-col justify-between">
+          <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Daily Limit Usage</div>
+          <div class="w-full bg-slate-800 rounded-full h-2 mt-2.5 overflow-hidden">
+            <div id="budget-progress-bar" class="bg-emerald-500 h-full w-0 transition-all duration-500 rounded-full"></div>
+          </div>
+          <div id="budget-progress-text" class="text-[9px] text-slate-400 mt-2 truncate">Remaining daily allowance</div>
+        </div>
+      </div>
+
+      <!-- Main Action Section: Quick log & Manual log forms side-by-side on md -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- Category Breakdown progress details -->
+        <div class="p-5 rounded-3xl border border-slate-800 bg-slate-900/20 glass-panel flex flex-col">
+          <h3 class="font-bold text-base text-slate-200 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-chart-pie text-emerald-400 text-sm"></i>
+            <span>Emission Breakdown</span>
+          </h3>
+
+          <div class="space-y-4 flex-1 flex flex-col justify-between">
+            <!-- Transport Bar -->
+            <div>
+              <div class="flex justify-between text-xs font-semibold mb-1 text-slate-300">
+                <span>🚗 Transport</span>
+                <span id="cat-val-transport" class="text-slate-400">0.0 kg</span>
+              </div>
+              <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden">
+                <div id="cat-bar-transport" class="bg-emerald-500 h-full w-0 transition-all duration-500 rounded-full"></div>
+              </div>
+            </div>
+
+            <!-- Food Bar -->
+            <div>
+              <div class="flex justify-between text-xs font-semibold mb-1 text-slate-300">
+                <span>🥗 Food</span>
+                <span id="cat-val-food" class="text-slate-400">0.0 kg</span>
+              </div>
+              <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden">
+                <div id="cat-bar-food" class="bg-teal-500 h-full w-0 transition-all duration-500 rounded-full"></div>
+              </div>
+            </div>
+
+            <!-- Energy Bar -->
+            <div>
+              <div class="flex justify-between text-xs font-semibold mb-1 text-slate-300">
+                <span>⚡ Energy</span>
+                <span id="cat-val-energy" class="text-slate-400">0.0 kg</span>
+              </div>
+              <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden">
+                <div id="cat-bar-energy" class="bg-cyan-500 h-full w-0 transition-all duration-500 rounded-full"></div>
+              </div>
+            </div>
+
+            <!-- Consumption Bar -->
+            <div>
+              <div class="flex justify-between text-xs font-semibold mb-1 text-slate-300">
+                <span>🛍️ Consumption</span>
+                <span id="cat-val-consumption" class="text-slate-400">0.0 kg</span>
+              </div>
+              <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden">
+                <div id="cat-bar-consumption" class="bg-indigo-500 h-full w-0 transition-all duration-500 rounded-full"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity Logger Form -->
+        <div class="p-5 rounded-3xl border border-slate-800 bg-slate-900/20 glass-panel">
+          <h3 class="font-bold text-base text-slate-200 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-plus-circle text-emerald-400 text-sm"></i>
+            <span>Log Daily Activities</span>
+          </h3>
+
+          <form id="log-activity-form" class="space-y-4">
+            <div>
+              <label for="log-category" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Category</label>
+              <select id="log-category" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-800 bg-slate-950 text-slate-100 focus:outline-none focus:border-emerald-500 transition-colors">
+                <option value="transport">🚗 Transport</option>
+                <option value="food">🥗 Food & Diet</option>
+                <option value="energy">⚡ Utilities & Energy</option>
+                <option value="consumption">🛍️ Shopping / Consumption</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="log-type" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Activity Type</label>
+              <select id="log-type" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-800 bg-slate-950 text-slate-100 focus:outline-none focus:border-emerald-500 transition-colors">
+                <!-- Dynamically populated based on category -->
+              </select>
+            </div>
+
+            <div>
+              <label for="log-value" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Amount</label>
+              <div class="flex items-center gap-2">
+                <input type="number" id="log-value" step="any" required placeholder="0.0" min="0.1" class="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-800 bg-slate-950 text-slate-100 focus:outline-none focus:border-emerald-500 transition-all">
+                <span id="log-unit-text" class="text-xs text-slate-400 font-semibold w-16">units</span>
+              </div>
+            </div>
+
+            <button type="submit" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-extrabold text-xs tracking-wider uppercase hover:from-emerald-400 hover:to-teal-400 transition-all select-none">Log Activity</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Quick Action Panel & Today's Logs Side-by-side or stack -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- Quick Log Actions -->
+        <div class="p-5 rounded-3xl border border-slate-800 bg-slate-900/20 glass-panel">
+          <h3 class="font-bold text-base text-slate-200 mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-bolt text-amber-400 text-sm"></i>
+            <span>Quick Eco Saves</span>
+          </h3>
+          <p class="text-xs text-slate-400 mb-4 leading-relaxed">Instantly log positive green swaps. Each action shaves CO2 off your daily net emissions and awards 10 points!</p>
+          
+          <div class="space-y-2.5">
+            <!-- Meal Swap -->
+            <button onclick="quickLogAction('plant_based_meal', 'Ate a plant-based meal')" class="w-full flex items-center justify-between p-3 rounded-xl border border-emerald-500/10 bg-emerald-500/5 hover:bg-emerald-500/10 text-left hover:border-emerald-500/30 transition-all group">
+              <div class="flex items-center gap-3">
+                <span class="text-lg select-none">🥗</span>
+                <div>
+                  <div class="text-xs font-bold text-slate-200 group-hover:text-emerald-400">Ate Plant-Based Meal</div>
+                  <div class="text-[9px] text-slate-400">Substituted meat dish</div>
+                </div>
+              </div>
+              <span class="text-xs text-emerald-400 font-bold">-1.2 kg CO2e</span>
+            </button>
+
+            <!-- Transit Swap -->
+            <button onclick="quickLogAction('public_transit_swap', 'Swapped driving for public transit')" class="w-full flex items-center justify-between p-3 rounded-xl border border-emerald-500/10 bg-emerald-500/5 hover:bg-emerald-500/10 text-left hover:border-emerald-500/30 transition-all group">
+              <div class="flex items-center gap-3">
+                <span class="text-lg select-none">🚌</span>
+                <div>
+                  <div class="text-xs font-bold text-slate-200 group-hover:text-emerald-400">Swapped Car for Transit</div>
+                  <div class="text-[9px] text-slate-400">Commuted 10km via public transit</div>
+                </div>
+              </div>
+              <span class="text-xs text-emerald-400 font-bold">-1.6 kg CO2e</span>
+            </button>
+
+            <!-- Device Swap -->
+            <button onclick="quickLogAction('unplug_appliances', 'Unplugged unused devices')" class="w-full flex items-center justify-between p-3 rounded-xl border border-emerald-500/10 bg-emerald-500/5 hover:bg-emerald-500/10 text-left hover:border-emerald-500/30 transition-all group">
+              <div class="flex items-center gap-3">
+                <span class="text-lg select-none">🔌</span>
+                <div>
+                  <div class="text-xs font-bold text-slate-200 group-hover:text-emerald-400">Unplugged Standby Devices</div>
+                  <div class="text-[9px] text-slate-400">Stopped phantom energy waste</div>
+                </div>
+              </div>
+              <span class="text-xs text-emerald-400 font-bold">-0.5 kg CO2e</span>
+            </button>
+
+            <!-- Single-use Swap -->
+            <button onclick="quickLogAction('reusable_bag_mug', 'Used reusable cup/bag')" class="w-full flex items-center justify-between p-3 rounded-xl border border-emerald-500/10 bg-emerald-500/5 hover:bg-emerald-500/10 text-left hover:border-emerald-500/30 transition-all group">
+              <div class="flex items-center gap-3">
+                <span class="text-lg select-none">🛍️</span>
+                <div>
+                  <div class="text-xs font-bold text-slate-200 group-hover:text-emerald-400">Used Reusable Bag / Mug</div>
+                  <div class="text-[9px] text-slate-400">Avoided single-use plastics</div>
+                </div>
+              </div>
+              <span class="text-xs text-emerald-400 font-bold">-0.2 kg CO2e</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Daily Logs History list -->
+        <div class="p-5 rounded-3xl border border-slate-800 bg-slate-900/20 glass-panel flex flex-col">
+          <h3 class="font-bold text-base text-slate-200 mb-3 flex items-center gap-2">
+            <i class="fa-solid fa-list-check text-emerald-400 text-sm"></i>
+            <span>Today's Log Activity</span>
+          </h3>
+          
+          <div id="log-list" class="flex-1 overflow-y-auto space-y-2 max-h-[260px] pr-1" aria-label="Activity list history">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Actionable Roadmaps: Weekly Challenges -->
+      <div class="p-5 rounded-3xl border border-slate-800 bg-slate-900/20 glass-panel">
+        <h3 class="font-bold text-base text-slate-200 mb-2 flex items-center gap-2">
+          <i class="fa-solid fa-route text-emerald-400 text-sm"></i>
+          <span>Weekly Reduction Roadmap</span>
+        </h3>
+        <p class="text-xs text-slate-400 mb-5 leading-relaxed">Conquer these weekly challenge tasks. Complete them to earn extra points and dynamically reduce your total daily emission count!</p>
+        
+        <div id="challenge-list" class="space-y-3" aria-label="Weekly challenges roadmap">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Gamified Badges unlocked grid -->
+      <div class="p-5 rounded-3xl border border-slate-800 bg-slate-900/20 glass-panel">
+        <h3 class="font-bold text-base text-slate-200 mb-2 flex items-center gap-2">
+          <i class="fa-solid fa-award text-amber-400 text-sm"></i>
+          <span>Eco Achievements & Badges</span>
+        </h3>
+        <p class="text-xs text-slate-400 mb-5 leading-relaxed">Earn badges by logging actions regularly, saving carbon, and beating daily thresholds.</p>
+        
+        <div id="badge-list" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3" aria-label="Eco badges display panel">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Smart AI Assistant Panel (30%) -->
+    <section class="lg:w-4/12 flex flex-col" aria-label="AI Eco Companion Chat Widget">
+      <div class="p-5 rounded-3xl border border-slate-800 bg-slate-900/20 glass-panel flex flex-col h-[500px] lg:h-full lg:sticky lg:top-20">
+        
+        <!-- Widget Header -->
+        <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+              <i class="fa-solid fa-robot"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-sm text-slate-200">Eco-Assistant</h3>
+              <p class="text-[9px] text-emerald-400 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Context Aware</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat History Window -->
+        <div id="chat-window" class="flex-1 overflow-y-auto py-4 space-y-4 flex flex-col pr-1" aria-live="polite" aria-label="Conversation window">
+          <!-- Populated dynamically -->
+        </div>
+
+        <!-- Chat Input Form -->
+        <form id="chat-form" class="flex gap-2 pt-3 border-t border-slate-800">
+          <input type="text" id="chat-input" required autocomplete="off" placeholder="Ask about carbon savings..." aria-label="Message text entry" class="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-800 bg-slate-950 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-500 transition-colors">
+          <button type="submit" aria-label="Send message button" class="w-9 h-9 rounded-xl bg-emerald-500 text-slate-950 hover:bg-emerald-400 flex items-center justify-center transition-colors">
+            <i class="fa-solid fa-paper-plane text-xs"></i>
+          </button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer Section -->
+  <footer class="w-full py-6 mt-12 border-t border-slate-900 bg-slate-950/80">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+      <div class="flex items-center gap-1.5">
+        <i class="fa-solid fa-leaf text-emerald-500"></i>
+        <span>EcoTrace Carbon Footprint tracking is an open initiative.</span>
+      </div>
+      <div>
+        <span>© 2026 EcoTrace. All Rights Reserved. Built with ESG Compliance in mind.</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- App JavaScript Modules -->
+  <script src="js/calculator.js"></script>
+  <script src="js/challenges.js"></script>
+  <script src="js/ai-assistant.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

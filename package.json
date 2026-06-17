@@ -1,0 +1,19 @@
+{
+  "name": "ecotrace",
+  "version": "1.0.0",
+  "description": "EcoTrace - Personal Carbon Footprint Tracker & Reduction Assistant",
+  "main": "js/app.js",
+  "scripts": {
+    "test": "node tests/test-calculator.js",
+    "start": "npx -y http-server -p 8080"
+  },
+  "keywords": [
+    "carbon-footprint",
+    "sustainability",
+    "tracker"
+  ],
+  "author": "EcoTrace Team",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {}
+}
