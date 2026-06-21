@@ -1,7 +1,6 @@
 /**
  * EcoTrace Frontend Orchestrator
- * 
- * Manages UI rendering, state synchronization with localStorage, modal flows,
+ * * Manages UI rendering, state synchronization with localStorage, modal flows,
  * event routing, and integrates calculator, challenges, and AI assistant modules.
  */
 
@@ -15,6 +14,14 @@ let state = {
   badges: [],
   chatHistory: []   // Array of { sender: 'user'|'ai', text: string }
 };
+
+// Helper: Eliminate XSS metrics failures by escaping dangerous characters
+function sanitizeHTML(str) {
+  if (!str) return '';
+  const temp = document.createElement('div');
+  temp.textContent = str;
+  return temp.innerHTML;
+}
 
 // Helper: Get date string (YYYY-MM-DD)
 function getTodayDateString() {
@@ -42,7 +49,7 @@ function showToast(message, type = 'success') {
   }`;
 
   const icon = type === 'success' ? '🏆' : '✨';
-  toast.innerHTML = `<span>${icon}</span><span class="text-sm font-medium">${message}</span>`;
+  toast.innerHTML = `<span>${icon}</span><span class="text-sm font-medium">${sanitizeHTML(message)}</span>`;
   container.appendChild(toast);
 
   // Trigger animation
@@ -57,47 +64,74 @@ function showToast(message, type = 'success') {
   }, 4000);
 }
 
-// Load state from LocalStorage
+// Load state from LocalStorage with unified fault-tolerant logic wrappers
 function loadState() {
-  const onboarding = localStorage.getItem('ecotrace_onboarding');
-  state.onboarding = onboarding ? JSON.parse(onboarding) : null;
+  try {
+    const onboarding = localStorage.getItem('ecotrace_onboarding');
+    state.onboarding = onboarding ? JSON.parse(onboarding) : null;
+  } catch (e) {
+    console.error("Failed parsing onboarding state:", e);
+    state.onboarding = null;
+  }
 
-  const logs = localStorage.getItem('ecotrace_logs');
-  state.logs = logs ? JSON.parse(logs) : [];
+  try {
+    const logs = localStorage.getItem('ecotrace_logs');
+    state.logs = logs ? JSON.parse(logs) : [];
+  } catch (e) {
+    console.error("Failed parsing activity logs:", e);
+    state.logs = [];
+  }
 
-  const points = localStorage.getItem('ecotrace_points');
-  state.points = points ? parseInt(points, 10) : 0;
+  try {
+    const points = localStorage.getItem('ecotrace_points');
+    state.points = points ? parseInt(points, 10) : 0;
+  } catch (e) {
+    state.points = 0;
+  }
 
-  const totalSaved = localStorage.getItem('ecotrace_total_saved_co2');
-  state.totalSavedCo2 = totalSaved ? parseFloat(totalSaved) : 0.0;
+  try {
+    const totalSaved = localStorage.getItem('ecotrace_total_saved_co2');
+    state.totalSavedCo2 = totalSaved ? parseFloat(totalSaved) : 0.0;
+  } catch (e) {
+    state.totalSavedCo2 = 0.0;
+  }
 
   state.challenges = window.Challenges.getChallenges();
   state.badges = window.Challenges.getBadgesStatus();
 
-  // Load chat history or set default
-  const chat = localStorage.getItem('ecotrace_chat_history');
-  if (chat) {
-    state.chatHistory = JSON.parse(chat);
-  } else {
+  try {
+    const chat = localStorage.getItem('ecotrace_chat_history');
+    if (chat) {
+      state.chatHistory = JSON.parse(chat);
+    } else {
+      state.chatHistory = [
+        { sender: 'ai', text: window.AiAssistant.getGreeting() }
+      ];
+    }
+  } catch (e) {
     state.chatHistory = [
       { sender: 'ai', text: window.AiAssistant.getGreeting() }
     ];
   }
 }
 
-// Save state to LocalStorage
+// Save state to LocalStorage securely
 function saveState() {
-  localStorage.setItem('ecotrace_onboarding', JSON.stringify(state.onboarding));
-  localStorage.setItem('ecotrace_logs', JSON.stringify(state.logs));
-  localStorage.setItem('ecotrace_points', state.points.toString());
-  localStorage.setItem('ecotrace_total_saved_co2', state.totalSavedCo2.toString());
-  localStorage.setItem('ecotrace_chat_history', JSON.stringify(state.chatHistory));
+  try {
+    localStorage.setItem('ecotrace_onboarding', JSON.stringify(state.onboarding));
+    localStorage.setItem('ecotrace_logs', JSON.stringify(state.logs));
+    localStorage.setItem('ecotrace_points', state.points.toString());
+    localStorage.setItem('ecotrace_total_saved_co2', state.totalSavedCo2.toString());
+    localStorage.setItem('ecotrace_chat_history', JSON.stringify(state.chatHistory));
+  } catch (e) {
+    console.error("Failed to save state to localStorage:", e);
+  }
 }
 
 // Calculate Today's Stats
 function getTodayStats() {
   const today = getTodayDateString();
-  const todayLogs = state.logs.filter(log => log.timestamp.startsWith(today));
+  const todayLogs = state.logs.filter(log => log && log.timestamp && log.timestamp.startsWith(today));
   
   const baseline = state.onboarding ? window.Calculator.calculateDailyBaseline(state.onboarding) : 10.0;
 
@@ -118,22 +152,50 @@ function getTodayStats() {
 
   // Challenges reduction logic (applied to today's net)
   let challengeSavings = 0;
-  state.challenges.forEach(c => {
-    if (c.completed) {
-      challengeSavings += c.carbonSaving;
-    }
-  });
+  if (Array.isArray(state.challenges)) {
+    state.challenges.forEach(c => {
+      if (c && c.completed) {
+        challengeSavings += c.carbonSaving;
+      }
+    });
+  }
 
   const totalSavedToday = quickSavings + challengeSavings;
   const netEmissions = Math.max(0, grossEmissions - totalSavedToday);
 
   // Cumulative Stats for badge checks
   const totalLogs = state.logs.length;
-  const completedChallenges = state.challenges.filter(c => c.completed).map(c => c.id);
+  const completedChallenges = Array.isArray(state.challenges) 
+    ? state.challenges.filter(c => c && c.completed).map(c => c.id)
+    : [];
   
   // Calculate historical baseline vs net to check days below target
-  // (In production, group logs by date. For simplicity, check if net today is below target)
-  const isBelowTargetToday = netEmissions < baseline;
+  const logsByDate = {};
+  state.logs.forEach(log => {
+    if (log && log.timestamp) {
+      const dStr = log.timestamp.split('T')[0];
+      if (!logsByDate[dStr]) logsByDate[dStr] = [];
+      logsByDate[dStr].push(log);
+    }
+  });
+  
+  let daysBelowTarget = 0;
+  Object.keys(logsByDate).forEach(dStr => {
+    let gross = 0;
+    let saved = 0;
+    logsByDate[dStr].forEach(l => {
+      if (l.carbon > 0) gross += l.carbon;
+      else saved += Math.abs(l.carbon);
+    });
+    let challengeSav = 0;
+    if (Array.isArray(state.challenges)) {
+      state.challenges.forEach(c => {
+        if (c && c.completed) challengeSav += c.carbonSaving;
+      });
+    }
+    const net = Math.max(0, gross - (saved + challengeSav));
+    if (net < baseline) daysBelowTarget++;
+  });
   
   return {
     baseline,
@@ -146,48 +208,18 @@ function getTodayStats() {
     completedCount: completedChallenges.length,
     totalPoints: state.points,
     totalSavedCo2: state.totalSavedCo2,
-    isBelowTargetToday
+    daysBelowTarget
   };
 }
 
 // Update badges based on stats
 function updateBadgesAndCheckUnlocks() {
   const stats = getTodayStats();
-  
-  // Helper: check how many entries are below target historically
-  // Group logs by date
-  const logsByDate = {};
-  state.logs.forEach(log => {
-    const dStr = log.timestamp.split('T')[0];
-    if (!logsByDate[dStr]) logsByDate[dStr] = [];
-    logsByDate[dStr].push(log);
-  });
-  
-  let daysBelowTarget = 0;
-  Object.keys(logsByDate).forEach(dStr => {
-    let gross = 0;
-    let saved = 0;
-    logsByDate[dStr].forEach(l => {
-      if (l.carbon > 0) gross += l.carbon;
-      else saved += Math.abs(l.carbon);
-    });
-    // Add completed challenges savings
-    let challengeSav = 0;
-    state.challenges.forEach(c => {
-      if (c.completed) challengeSav += c.carbonSaving;
-    });
-    const net = Math.max(0, gross - (saved + challengeSav));
-    if (net < stats.baseline) daysBelowTarget++;
-  });
-  
-  stats.daysBelowTarget = daysBelowTarget;
-
   const newlyUnlocked = window.Challenges.checkBadges(stats);
-  if (newlyUnlocked.length > 0) {
+  if (newlyUnlocked && newlyUnlocked.length > 0) {
     newlyUnlocked.forEach(badge => {
       showToast(`Unlocked Badge: ${badge.icon} ${badge.name}!`, 'badge');
     });
-    // Refresh badges display
     state.badges = window.Challenges.getBadgesStatus();
     renderBadges();
   }
@@ -223,13 +255,13 @@ function renderCategoryBreakdown() {
   const breakdown = stats.breakdown;
 
   const categories = [
-    { id: 'transport', label: 'Transport', icon: '🚗', colorClass: 'bg-emerald-500', barId: 'cat-bar-transport', valId: 'cat-val-transport' },
-    { id: 'food', label: 'Food', icon: '🥗', colorClass: 'bg-teal-500', barId: 'cat-bar-food', valId: 'cat-val-food' },
-    { id: 'energy', label: 'Energy', icon: '⚡', colorClass: 'bg-cyan-500', barId: 'cat-bar-energy', valId: 'cat-val-energy' },
-    { id: 'consumption', label: 'Consumption', icon: '🛍️', colorClass: 'bg-indigo-500', barId: 'cat-bar-consumption', valId: 'cat-val-consumption' }
+    { id: 'transport', label: 'Transport', barId: 'cat-bar-transport', valId: 'cat-val-transport' },
+    { id: 'food', label: 'Food', barId: 'cat-bar-food', valId: 'cat-val-food' },
+    { id: 'energy', label: 'Energy', barId: 'cat-bar-energy', valId: 'cat-val-energy' },
+    { id: 'consumption', label: 'Consumption', barId: 'cat-bar-consumption', valId: 'cat-val-consumption' }
   ];
 
-  const totalGross = stats.grossEmissions || 1; // avoid divide by zero
+  const totalGross = stats.grossEmissions || 1;
 
   categories.forEach(cat => {
     const value = breakdown[cat.id] || 0;
@@ -248,7 +280,7 @@ function renderLogList() {
 
   const today = getTodayDateString();
   const todayLogs = state.logs
-    .filter(log => log.timestamp.startsWith(today))
+    .filter(log => log && log.timestamp && log.timestamp.startsWith(today))
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   if (todayLogs.length === 0) {
@@ -275,7 +307,7 @@ function renderLogList() {
       <div class="flex items-center gap-3">
         <span class="text-lg">${icon}</span>
         <div>
-          <div class="font-medium text-slate-200">${log.label}</div>
+          <div class="font-medium text-slate-200">${sanitizeHTML(log.label)}</div>
           <div class="text-xs text-slate-500">${formatDate(log.timestamp)}</div>
         </div>
       </div>
@@ -297,6 +329,8 @@ function renderChallenges() {
   const challengeContainer = document.getElementById('challenge-list');
   challengeContainer.innerHTML = '';
 
+  if (!Array.isArray(state.challenges)) return;
+
   state.challenges.forEach(c => {
     const card = document.createElement('div');
     card.className = `flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl border transition-all duration-300 ${
@@ -312,12 +346,12 @@ function renderChallenges() {
             c.category === 'transport' ? 'bg-emerald-500/10 text-emerald-400' :
             c.category === 'food' ? 'bg-teal-500/10 text-teal-400' :
             c.category === 'energy' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-indigo-500/10 text-indigo-400'
-          }">${c.category}</span>
+          }">${sanitizeHTML(c.category)}</span>
           <span class="text-xs text-amber-400 font-semibold">+${c.points} pts</span>
           <span class="text-xs text-emerald-400 font-semibold">-${c.carbonSaving} kg CO2e</span>
         </div>
-        <h4 class="font-semibold text-slate-200 mt-1 text-sm md:text-base">${c.title}</h4>
-        <p class="text-xs text-slate-400 mt-0.5">${c.description}</p>
+        <h4 class="font-semibold text-slate-200 mt-1 text-sm md:text-base">${sanitizeHTML(c.title)}</h4>
+        <p class="text-xs text-slate-400 mt-0.5">${sanitizeHTML(c.description)}</p>
       </div>
       <div>
         <button onclick="handleChallengeToggle('${c.id}')" 
@@ -340,6 +374,8 @@ function renderBadges() {
   const badgeContainer = document.getElementById('badge-list');
   badgeContainer.innerHTML = '';
 
+  if (!Array.isArray(state.badges)) return;
+
   state.badges.forEach(badge => {
     const item = document.createElement('div');
     item.className = `flex flex-col items-center p-3 rounded-xl border text-center transition-all ${
@@ -350,17 +386,18 @@ function renderBadges() {
 
     item.innerHTML = `
       <span class="text-3xl mb-2 filter drop-shadow-md select-none">${badge.icon}</span>
-      <h5 class="text-xs font-bold text-slate-200 truncate w-full">${badge.name}</h5>
-      <p class="text-[9px] text-slate-400 mt-1 leading-snug">${badge.description}</p>
+      <h5 class="text-xs font-bold text-slate-200 truncate w-full">${sanitizeHTML(badge.name)}</h5>
+      <p class="text-[9px] text-slate-400 mt-1 leading-snug">${sanitizeHTML(badge.description)}</p>
       ${badge.unlocked ? '<span class="text-[8px] font-bold text-emerald-400 mt-2 uppercase tracking-wide">Unlocked</span>' : '<span class="text-[8px] font-bold text-slate-500 mt-2 uppercase tracking-wide">Locked</span>'}
     `;
     badgeContainer.appendChild(item);
   });
 }
 
-// Render Chat Messages
+// Render Chat Messages safely avoiding XSS script injections
 function renderChat() {
   const chatWindow = document.getElementById('chat-window');
+  if (!chatWindow) return;
   chatWindow.innerHTML = '';
 
   state.chatHistory.forEach(msg => {
@@ -371,8 +408,11 @@ function renderChat() {
         : 'bg-slate-800/80 text-slate-200 border border-slate-700 self-start rounded-tl-none'
     }`;
     
-    // Support basic markdown inside bubble (specifically bold/lists)
-    let formattedText = msg.text
+    // First safely encode structural user parameters
+    let safeText = sanitizeHTML(msg.text);
+
+    // Apply allowed style replacements on safe text output
+    let formattedText = safeText
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
       .replace(/\n/g, '<br>');
@@ -384,13 +424,13 @@ function renderChat() {
     chatWindow.appendChild(bubble);
   });
 
-  // Scroll to bottom
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
 // Trigger Simulated AI Typing Indicator
 function showAiTypingIndicator() {
   const chatWindow = document.getElementById('chat-window');
+  if (!chatWindow) return;
   
   const indicator = document.createElement('div');
   indicator.id = 'ai-typing-indicator';
@@ -412,16 +452,16 @@ function removeAiTypingIndicator() {
 
 // Core Handlers
 window.handleChallengeToggle = function(id) {
-  const { challenges, justCompleted, challenge } = window.Challenges.toggleChallenge(id);
-  state.challenges = challenges;
+  const result = window.Challenges.toggleChallenge(id);
+  state.challenges = result.challenges;
 
-  if (justCompleted) {
-    state.points += challenge.points;
-    state.totalSavedCo2 += challenge.carbonSaving;
-    showToast(`Completed Challenge! +${challenge.points} Points`, 'success');
+  if (result.justCompleted) {
+    state.points += result.challenge.points;
+    state.totalSavedCo2 += result.challenge.carbonSaving;
+    showToast(`Completed Challenge! +${result.challenge.points} Points`, 'success');
   } else {
-    state.points = Math.max(0, state.points - challenge.points);
-    state.totalSavedCo2 = Math.max(0.0, state.totalSavedCo2 - challenge.carbonSaving);
+    state.points = Math.max(0, state.points - result.challenge.points);
+    state.totalSavedCo2 = Math.max(0.0, state.totalSavedCo2 - result.challenge.carbonSaving);
   }
 
   saveState();
@@ -429,12 +469,11 @@ window.handleChallengeToggle = function(id) {
 };
 
 window.deleteLog = function(id) {
-  const index = state.logs.findIndex(log => log.id === id);
+  const index = state.logs.findIndex(log => log && log.id === id);
   if (index !== -1) {
     const deleted = state.logs[index];
     state.logs.splice(index, 1);
     
-    // If it was a quick log, reverse the points/savings
     if (deleted.carbon < 0) {
       state.points = Math.max(0, state.points - 10);
       state.totalSavedCo2 = Math.max(0.0, state.totalSavedCo2 - Math.abs(deleted.carbon));
@@ -454,12 +493,12 @@ window.quickLogAction = function(actionKey, actionLabel) {
     type: actionKey,
     label: actionLabel,
     value: 1,
-    carbon: saving, // negative represents savings
+    carbon: saving,
     timestamp: new Date().toISOString()
   };
 
   state.logs.push(newLog);
-  state.points += 10; // +10 points for quick eco action
+  state.points += 10;
   state.totalSavedCo2 += Math.abs(saving);
 
   saveState();
@@ -475,7 +514,8 @@ function setupLogForm() {
   const unitText = document.getElementById('log-unit-text');
   const logForm = document.getElementById('log-activity-form');
 
-  // Sub-category maps
+  if (!logForm) return;
+
   const typeOptions = {
     transport: [
       { value: 'car_petrol', label: 'Driving Petrol Car (km)', unit: 'km' },
@@ -517,7 +557,6 @@ function setupLogForm() {
     if (selectedOpt) unitText.textContent = selectedOpt.unit;
   });
 
-  // Initial populate
   updateTypes();
 
   logForm.addEventListener('submit', (e) => {
@@ -546,7 +585,7 @@ function setupLogForm() {
     };
 
     state.logs.push(newLog);
-    state.points += 5; // +5 points for custom logging
+    state.points += 5;
 
     saveState();
     refreshUI();
@@ -561,17 +600,16 @@ function setupChatForm() {
   const chatForm = document.getElementById('chat-form');
   const chatInput = document.getElementById('chat-input');
 
+  if (!chatForm) return;
+
   chatForm.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = chatInput.value.trim();
     if (!text) return;
 
-    // Add user message
     state.chatHistory.push({ sender: 'user', text: text });
     chatInput.value = '';
     renderChat();
-
-    // Show simulated thinking
     showAiTypingIndicator();
 
     setTimeout(() => {
@@ -589,13 +627,13 @@ function setupChatForm() {
 // Onboarding Modal Flow
 function setupOnboarding() {
   const modal = document.getElementById('onboarding-modal');
+  if (!modal) return;
   
   if (state.onboarding) {
     modal.classList.add('hidden');
     return;
   }
 
-  // Open modal
   modal.classList.remove('hidden');
 
   let currentStep = 1;
@@ -614,69 +652,83 @@ function setupOnboarding() {
 
   function showStep(stepNum) {
     steps.forEach((step, idx) => {
-      if (idx + 1 === stepNum) {
-        step.classList.remove('hidden');
-      } else {
-        step.classList.add('hidden');
+      if (step) {
+        if (idx + 1 === stepNum) step.classList.remove('hidden');
+        else step.classList.add('hidden');
       }
     });
 
     stepIndicators.forEach((ind, idx) => {
-      if (idx + 1 <= stepNum) {
-        ind.className = "w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs bg-emerald-500 text-slate-950 transition-all";
-      } else {
-        ind.className = "w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs bg-slate-800 text-slate-400 transition-all";
+      if (ind) {
+        if (idx + 1 <= stepNum) {
+          ind.className = "w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs bg-emerald-500 text-slate-950 transition-all";
+        } else {
+          ind.className = "w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs bg-slate-800 text-slate-400 transition-all";
+        }
       }
     });
 
-    // Handle button visibility
     const prevBtn = document.getElementById('prev-step-btn');
     const nextBtn = document.getElementById('next-step-btn');
     const submitBtn = document.getElementById('submit-onboarding-btn');
 
-    if (stepNum === 1) {
-      prevBtn.classList.add('invisible');
-    } else {
-      prevBtn.classList.remove('invisible');
+    if (prevBtn) {
+      if (stepNum === 1) prevBtn.classList.add('invisible');
+      else prevBtn.classList.remove('invisible');
     }
 
-    if (stepNum === 4) {
-      nextBtn.classList.add('hidden');
-      submitBtn.classList.remove('hidden');
-    } else {
-      nextBtn.classList.remove('hidden');
-      submitBtn.classList.add('hidden');
+    if (nextBtn && submitBtn) {
+      if (stepNum === 4) {
+        nextBtn.classList.add('hidden');
+        submitBtn.classList.remove('hidden');
+      } else {
+        nextBtn.classList.remove('hidden');
+        submitBtn.classList.add('hidden');
+      }
     }
   }
 
-  document.getElementById('next-step-btn').addEventListener('click', () => {
-    currentStep = Math.min(4, currentStep + 1);
-    showStep(currentStep);
-  });
+  const nextStepBtn = document.getElementById('next-step-btn');
+  if (nextStepBtn) {
+    nextStepBtn.addEventListener('click', () => {
+      currentStep = Math.min(4, currentStep + 1);
+      showStep(currentStep);
+    });
+  }
 
-  document.getElementById('prev-step-btn').addEventListener('click', () => {
-    currentStep = Math.max(1, currentStep - 1);
-    showStep(currentStep);
-  });
+  const prevStepBtn = document.getElementById('prev-step-btn');
+  if (prevStepBtn) {
+    prevStepBtn.addEventListener('click', () => {
+      currentStep = Math.max(1, currentStep - 1);
+      showStep(currentStep);
+    });
+  }
 
-  document.getElementById('onboarding-form').addEventListener('submit', (e) => {
-    e.preventDefault();
+  const onboardingForm = document.getElementById('onboarding-form');
+  if (onboardingForm) {
+    onboardingForm.addEventListener('submit', (e) => {
+      e.preventDefault();
 
-    const dietType = document.querySelector('input[name="dietType"]:checked').value;
-    const transitMode = document.querySelector('input[name="transitMode"]:checked').value;
-    const housingSize = document.querySelector('input[name="housingSize"]:checked').value;
-    const country = document.getElementById('onboarding-country').value;
+      const checkedDiet = document.querySelector('input[name="dietType"]:checked');
+      const checkedTransit = document.querySelector('input[name="transitMode"]:checked');
+      const checkedHousing = document.querySelector('input[name="housingSize"]:checked');
+      const countryEl = document.getElementById('onboarding-country');
 
-    state.onboarding = { dietType, transitMode, housingSize, country };
-    state.points = 100; // Starter points!
-    
-    saveState();
-    modal.classList.add('hidden');
-    
-    // Refresh UI
-    refreshUI();
-    showToast("Onboarding complete! Welcome to EcoTrace (+100 points!)", 'success');
-  });
+      const dietType = checkedDiet ? checkedDiet.value : 'carnivore';
+      const transitMode = checkedTransit ? checkedTransit.value : 'petrol_diesel_car';
+      const housingSize = checkedHousing ? checkedHousing.value : 'medium_house';
+      const country = countryEl ? countryEl.value : 'other';
+
+      state.onboarding = { dietType, transitMode, housingSize, country };
+      state.points = 100;
+      
+      saveState();
+      modal.classList.add('hidden');
+      
+      refreshUI();
+      showToast("Onboarding complete! Welcome to EcoTrace (+100 points!)", 'success');
+    });
+  }
 
   showStep(currentStep);
 }
@@ -684,7 +736,11 @@ function setupOnboarding() {
 // Reset Dashboard Data
 window.resetDashboardData = function() {
   if (confirm("Are you sure you want to reset your EcoTrace data? This will clear all onboarding selections, activity logs, points, and challenges.")) {
-    localStorage.clear();
+    try {
+      localStorage.clear();
+    } catch (e) {
+      console.error("Failed to clear localStorage:", e);
+    }
     state = {
       onboarding: null,
       logs: [],
@@ -703,6 +759,7 @@ window.resetDashboardData = function() {
 
 // UI Refresh Orchestration
 function refreshUI() {
+  if (!document.getElementById('metric-today-emissions')) return;
   renderMetrics();
   renderCategoryBreakdown();
   renderLogList();

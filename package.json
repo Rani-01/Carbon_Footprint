@@ -5,7 +5,9 @@
   "main": "js/app.js",
   "scripts": {
     "test": "node tests/test-calculator.js",
-    "start": "npx -y http-server -p 8080"
+    "start": "npx -y http-server -p 8080",
+    "lint": "eslint js/**/*.js",
+    "format": "prettier --write js/**/*.js"
   },
   "keywords": [
     "carbon-footprint",
