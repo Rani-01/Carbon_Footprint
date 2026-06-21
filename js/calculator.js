@@ -1,10 +1,8 @@
 /**
  * EcoTrace Carbon Footprint Calculator Utilities
- * 
- * This module defines the carbon emission coefficients (in kg CO2e)
+ * * This module defines the carbon emission coefficients (in kg CO2e)
  * and calculation functions for baseline and logged activity metrics.
- * 
- * Supports both browser (global/ES6) and Node.js (CommonJS) environments.
+ * * Supports both browser (global/window) and Node.js (CommonJS) environments perfectly.
  */
 
 // Core Carbon Coefficients (kg CO2e)
@@ -67,10 +65,8 @@ const COEFFICIENTS = {
 
 /**
  * Calculates the initial daily baseline carbon footprint based on onboarding context.
- * 
- * Formula: (diet + transit + housing) * countryMultiplier
- * 
- * @param {Object} context 
+ * * Formula: (diet + transit + housing) * countryMultiplier
+ * * @param {Object} context 
  * @param {string} context.dietType - 'vegan', 'vegetarian', 'flexitarian', 'carnivore'
  * @param {string} context.transitMode - 'walking_biking', 'public_transit', 'electric_vehicle', 'petrol_diesel_car'
  * @param {string} context.housingSize - 'studio_apartment', 'medium_house', 'large_house'
@@ -100,14 +96,13 @@ function calculateDailyBaseline(context) {
 
 /**
  * Calculates the carbon footprint of a logged activity.
- * 
- * @param {string} category - 'transport', 'food', 'energy', 'consumption'
+ * * @param {string} category - 'transport', 'food', 'energy', 'consumption'
  * @param {string} type - specific type within the category
  * @param {number} value - numeric input (km, meals, kWh, items, hours)
  * @returns {number} Carbon footprint in kg CO2e
  */
 function calculateActivityEmissions(category, type, value) {
-  if (value < 0) return 0;
+  if (value < 0 || isNaN(value)) return 0;
   
   const categoryFactors = COEFFICIENTS.activities[category];
   if (!categoryFactors) return 0;
@@ -120,15 +115,14 @@ function calculateActivityEmissions(category, type, value) {
 
 /**
  * Calculates the savings from a quick action or challenge.
- * 
- * @param {string} actionKey - Key from COEFFICIENTS.quickActions
+ * * @param {string} actionKey - Key from COEFFICIENTS.quickActions
  * @returns {number} Carbon saved in kg CO2e (negative value)
  */
 function getQuickActionSavings(actionKey) {
   return COEFFICIENTS.quickActions[actionKey] || 0;
 }
 
-// Export module logic for both Node and Browser
+// Global scope instantiation for multi-tier platform matching
 const Calculator = {
   COEFFICIENTS,
   calculateDailyBaseline,
@@ -136,8 +130,12 @@ const Calculator = {
   getQuickActionSavings
 };
 
+// Export module logic safely for Node runtime tests
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = Calculator;
-} else {
+}
+
+// Bind module logic safely for browser runtime dashboards
+if (typeof window !== 'undefined') {
   window.Calculator = Calculator;
 }
